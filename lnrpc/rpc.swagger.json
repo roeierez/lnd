@@ -2283,7 +2283,7 @@
         "value": {
           "type": "string",
           "format": "int64",
-          "title": "/ The value of the payment in satoshis"
+          "description": "/ Deprecated, use value_sat or value_msat."
         },
         "creation_date": {
           "type": "string",
@@ -2305,6 +2305,16 @@
         "payment_preimage": {
           "type": "string",
           "title": "/ The payment preimage"
+        },
+        "value_sat": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The value of the payment in satoshies"
+        },
+        "value_msat": {
+          "type": "string",
+          "format": "int64",
+          "title": "/ The value of the payment in milli-satoshis"
         }
       }
     },

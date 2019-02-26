@@ -2793,6 +2793,11 @@
           "type": "boolean",
           "format": "boolean",
           "description": "/ Whether unconfirmed outputs should be used as inputs for the funding transaction."
+        },
+        "remote_chan_reserve_sat": {
+          "type": "string",
+          "format": "int64",
+          "description": "/ The number of satoshis we require the remote peer to reserve."
         }
       }
     },

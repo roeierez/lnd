@@ -3015,9 +3015,8 @@ type openChanReq struct {
 
 	chainHash chainhash.Hash
 
-	subtractFees      bool
-	localFundingAmt   btcutil.Amount
-	remoteChanReserve btcutil.Amount
+	subtractFees    bool
+	localFundingAmt btcutil.Amount
 
 	pushAmt lnwire.MilliSatoshi
 
@@ -3027,7 +3026,8 @@ type openChanReq struct {
 
 	minHtlc lnwire.MilliSatoshi
 
-	remoteCsvDelay uint16
+	remoteCsvDelay    uint16
+	remoteChanReserve btcutil.Amount
 
 	// minConfs indicates the minimum number of confirmations that each
 	// output selected to fund the channel should satisfy.

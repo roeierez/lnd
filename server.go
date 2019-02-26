@@ -3015,8 +3015,9 @@ type openChanReq struct {
 
 	chainHash chainhash.Hash
 
-	subtractFees    bool
-	localFundingAmt btcutil.Amount
+	subtractFees      bool
+	localFundingAmt   btcutil.Amount
+	remoteChanReserve btcutil.Amount
 
 	pushAmt lnwire.MilliSatoshi
 

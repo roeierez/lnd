@@ -1370,6 +1370,26 @@ func extractOpenChannelMinConfs(in *lnrpc.OpenChannelRequest) (int32, error) {
 	}
 }
 
+// validateChanReserve validates the remote channel reserve was set for this
+// channel in open channel request. This is mainly to ensure that reservation,
+// if set, is not bellow the dust limit and not above the local funding amount.
+func (r *rpcServer) validateChanReserve(chanReserve btcutil.Amount,
+	localFundingAmt btcutil.Amount) error {
+
+	dustLimit := r.server.cc.wallet.Cfg.DefaultConstraints.DustLimit
+	if chanReserve > 0 && chanReserve < dustLimit {
+		return errors.New("remote channel reserve was set to be less than " +
+			"the dust limit")
+	}
+
+	if chanReserve >= localFundingAmt {
+		return errors.New("remote channel reserve is too high, must be " +
+			"less than channel capacity")
+	}
+
+	return nil
+}
+
 // OpenChannel attempts to open a singly funded channel specified in the
 // request to a remote peer.
 func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
@@ -1388,6 +1408,7 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 	remoteInitialBalance := btcutil.Amount(in.PushSat)
 	minHtlc := lnwire.MilliSatoshi(in.MinHtlcMsat)
 	remoteCsvDelay := uint16(in.RemoteCsvDelay)
+	remoteChanReserve := btcutil.Amount(in.RemoteChanReserveSat)
 
 	// Ensure that the initial balance of the remote party (if pushing
 	// satoshis) does not exceed the amount the local party has requested
@@ -1463,6 +1484,13 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 		return err
 	}
 
+	// Ensure that we properly validate the remote channel reserve amount that
+	// was set for this channel.
+	err = r.validateChanReserve(remoteChanReserve, localFundingAmt)
+	if err != nil {
+		return err
+	}
+
 	rpcsLog.Debugf("[openchannel]: using fee of %v sat/kw for funding tx",
 		int64(feeRate))
 
@@ -1470,15 +1498,16 @@ func (r *rpcServer) OpenChannel(in *lnrpc.OpenChannelRequest,
 	// open a new channel. A stream is returned in place, this stream will
 	// be used to consume updates of the state of the pending channel.
 	req := &openChanReq{
-		targetPubkey:    nodePubKey,
-		chainHash:       *activeNetParams.GenesisHash,
-		localFundingAmt: localFundingAmt,
-		pushAmt:         lnwire.NewMSatFromSatoshis(remoteInitialBalance),
-		minHtlc:         minHtlc,
-		fundingFeePerKw: feeRate,
-		private:         in.Private,
-		remoteCsvDelay:  remoteCsvDelay,
-		minConfs:        minConfs,
+		targetPubkey:      nodePubKey,
+		chainHash:         *activeNetParams.GenesisHash,
+		localFundingAmt:   localFundingAmt,
+		pushAmt:           lnwire.NewMSatFromSatoshis(remoteInitialBalance),
+		minHtlc:           minHtlc,
+		fundingFeePerKw:   feeRate,
+		private:           in.Private,
+		remoteCsvDelay:    remoteCsvDelay,
+		minConfs:          minConfs,
+		remoteChanReserve: remoteChanReserve,
 	}
 
 	updateChan, errChan := r.server.OpenChannel(req)
@@ -1571,6 +1600,7 @@ func (r *rpcServer) OpenChannelSync(ctx context.Context,
 	remoteInitialBalance := btcutil.Amount(in.PushSat)
 	minHtlc := lnwire.MilliSatoshi(in.MinHtlcMsat)
 	remoteCsvDelay := uint16(in.RemoteCsvDelay)
+	remoteChanReserve := btcutil.Amount(in.RemoteChanReserveSat)
 
 	// Ensure that the initial balance of the remote party (if pushing
 	// satoshis) does not exceed the amount the local party has requested
@@ -1609,19 +1639,27 @@ func (r *rpcServer) OpenChannelSync(ctx context.Context,
 		return nil, err
 	}
 
+	// Ensure that we properly validate the remote channel reserve amount that
+	// was set for this channel.
+	err = r.validateChanReserve(remoteChanReserve, localFundingAmt)
+	if err != nil {
+		return nil, err
+	}
+
 	rpcsLog.Tracef("[openchannel] target sat/kw for funding tx: %v",
 		int64(feeRate))
 
 	req := &openChanReq{
-		targetPubkey:    nodepubKey,
-		chainHash:       *activeNetParams.GenesisHash,
-		localFundingAmt: localFundingAmt,
-		pushAmt:         lnwire.NewMSatFromSatoshis(remoteInitialBalance),
-		minHtlc:         minHtlc,
-		fundingFeePerKw: feeRate,
-		private:         in.Private,
-		remoteCsvDelay:  remoteCsvDelay,
-		minConfs:        minConfs,
+		targetPubkey:      nodepubKey,
+		chainHash:         *activeNetParams.GenesisHash,
+		localFundingAmt:   localFundingAmt,
+		pushAmt:           lnwire.NewMSatFromSatoshis(remoteInitialBalance),
+		minHtlc:           minHtlc,
+		fundingFeePerKw:   feeRate,
+		private:           in.Private,
+		remoteCsvDelay:    remoteCsvDelay,
+		minConfs:          minConfs,
+		remoteChanReserve: remoteChanReserve,
 	}
 
 	updateChan, errChan := r.server.OpenChannel(req)

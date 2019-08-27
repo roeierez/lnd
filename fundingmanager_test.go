@@ -2286,6 +2286,7 @@ func TestFundingManagerCustomChannelParameters(t *testing.T) {
 	// This is the custom parameters we'll use.
 	const csvDelay = 67
 	const minHtlc = 1234
+	const chanReserve = 100000
 
 	// We will consume the channel updates as we go, so no buffering is
 	// needed.
@@ -2299,15 +2300,16 @@ func TestFundingManagerCustomChannelParameters(t *testing.T) {
 	// workflow.
 	errChan := make(chan error, 1)
 	initReq := &openChanReq{
-		targetPubkey:    bob.privKey.PubKey(),
-		chainHash:       *activeNetParams.GenesisHash,
-		localFundingAmt: localAmt,
-		pushAmt:         lnwire.NewMSatFromSatoshis(pushAmt),
-		private:         false,
-		minHtlc:         minHtlc,
-		remoteCsvDelay:  csvDelay,
-		updates:         updateChan,
-		err:             errChan,
+		targetPubkey:      bob.privKey.PubKey(),
+		chainHash:         *activeNetParams.GenesisHash,
+		localFundingAmt:   localAmt,
+		pushAmt:           lnwire.NewMSatFromSatoshis(pushAmt),
+		private:           false,
+		minHtlc:           minHtlc,
+		remoteCsvDelay:    csvDelay,
+		remoteChanReserve: chanReserve,
+		updates:           updateChan,
+		err:               errChan,
 	}
 
 	alice.fundingMgr.initFundingWorkflow(bob, initReq)
@@ -2344,6 +2346,12 @@ func TestFundingManagerCustomChannelParameters(t *testing.T) {
 	if openChannelReq.HtlcMinimum != minHtlc {
 		t.Fatalf("expected OpenChannel to have minHtlc %v, got %v",
 			minHtlc, openChannelReq.HtlcMinimum)
+	}
+
+	// Check that the custom remoteChanReserve value is sent.
+	if openChannelReq.ChannelReserve != chanReserve {
+		t.Fatalf("expected OpenChannel to have chanReserve %v, got %v",
+			chanReserve, openChannelReq.ChannelReserve)
 	}
 
 	chanID := openChannelReq.PendingChannelID
@@ -2742,6 +2750,49 @@ func TestFundingManagerRejectPush(t *testing.T) {
 		t.Fatalf("expected ErrNonZeroPushAmount error, got \"%v\"",
 			string(err.Data))
 	}
+}
+
+// TestFundingManagerInvalidChanReserve ensures proper validation is done on
+// remoteChanReserve parameter sent to open channel.
+func TestFundingManagerInvalidChanReserve(t *testing.T) {
+	t.Parallel()
+
+	testInvalidChanReserve := func(chanReserve btcutil.Amount) {
+		alice, bob := setupFundingManagers(t)
+		defer tearDownFundingManagers(t, alice, bob)
+
+		// Create a funding request and start the workflow.
+		updateChan := make(chan *lnrpc.OpenStatusUpdate)
+		errChan := make(chan error, 1)
+		initReq := &openChanReq{
+			remoteChanReserve: chanReserve,
+			targetPubkey:      bob.privKey.PubKey(),
+			chainHash:         *activeNetParams.GenesisHash,
+			localFundingAmt:   500000,
+			pushAmt:           lnwire.NewMSatFromSatoshis(10),
+			private:           false,
+			updates:           updateChan,
+			err:               errChan,
+		}
+
+		alice.fundingMgr.initFundingWorkflow(bob, initReq)
+
+		// Alice should have sent the OpenChannel message to Bob.
+		select {
+		case _ = <-alice.msgChan:
+			t.Fatalf("init funding workflow should fail with invalid chan"+
+				"reserve %v", chanReserve)
+		case _ = <-initReq.err:
+		case <-time.After(time.Second * 5):
+			t.Fatalf("alice did not send OpenChannel message")
+		}
+	}
+
+	// Test channel reserve below dust
+	testInvalidChanReserve(300)
+
+	// test channel reserve above capacity
+	testInvalidChanReserve(500000)
 }
 
 // TestFundingManagerMaxConfs ensures that we don't accept a funding proposal
